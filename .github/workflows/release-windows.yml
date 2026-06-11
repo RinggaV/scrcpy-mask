@@ -1,0 +1,185 @@
+name: Release scrcpy-mask Windows
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: release-windows-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout codes
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4.1.0
+        with:
+          version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Build frontend
+        shell: bash
+        run: |
+          cd frontend
+          pnpm install
+          pnpm build
+
+      - name: Upload frontend build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-web-assets
+          path: assets/web
+
+  windows:
+    name: Build Windows
+    runs-on: windows-latest
+    needs: build-frontend
+    env:
+      PLATFORM: windows-x64
+      PROJECT_NAME: scrcpy-mask
+      FFMPEG_VERSION: 7.1.2
+    steps:
+      - name: Checkout codes
+        uses: actions/checkout@v4
+
+      - name: Download frontend build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-web-assets
+          path: assets/web
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up msvc
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Set up msys
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          msystem: MINGW64
+          install: >-
+            make
+            diffutils
+            yasm
+            pkg-config
+          path-type: inherit
+
+      - name: Cache FFmpeg build
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: ffmpeg-7.1.2/ffmpeg-${{ env.PLATFORM }}
+          key: ffmpeg-${{ env.PLATFORM }}-${{ env.FFMPEG_VERSION }}-v0.4
+
+      - name: Download and build FFmpeg (if not cached)
+        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: |
+          OS=${{ env.PLATFORM }}
+
+          curl -L -o FFmpeg-n${{ env.FFMPEG_VERSION }}.tar.gz https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n${{ env.FFMPEG_VERSION }}.tar.gz
+          tar -xzf FFmpeg-n${{ env.FFMPEG_VERSION }}.tar.gz
+          rm FFmpeg-n${{ env.FFMPEG_VERSION }}.tar.gz
+          mv FFmpeg-n${{ env.FFMPEG_VERSION }} ffmpeg-${{ env.FFMPEG_VERSION }}
+          cd ffmpeg-${{ env.FFMPEG_VERSION }}
+
+          ./configure --prefix=./ffmpeg-$OS \
+              --disable-all --disable-doc --disable-iconv \
+              --toolchain=msvc \
+              --enable-decoder=h264 --enable-decoder=hevc --enable-decoder=av1 \
+              --enable-swscale --enable-avformat --enable-avcodec --enable-avutil --enable-swresample \
+              --enable-gpl --enable-static --disable-shared
+
+          make -j$(nproc)
+          make install
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ env.PLATFORM }}
+
+      - name: Build scrcpy-mask
+        shell: pwsh
+        run: |
+          $ScriptDir = "${{ github.workspace }}"
+          $Prefix = "ffmpeg-${{ env.PLATFORM }}"
+          $FFMpeg = "ffmpeg-${{ env.FFMPEG_VERSION }}"
+
+          $env:PKG_CONFIG_PATH = "$ScriptDir\$FFMpeg\$Prefix\lib\pkgconfig"
+          $env:FFMPEG_DIR = "$ScriptDir\$FFMpeg\$Prefix"
+
+          cargo build --release
+
+          $OutputZip = "$ScriptDir\target\release\${{ env.PROJECT_NAME }}-${{ env.PLATFORM }}.zip"
+          $BuildTarget = "$ScriptDir\target\release\${{ env.PROJECT_NAME }}.exe"
+          $AssetsDir = "$ScriptDir\assets"
+
+          Compress-Archive -Path @($BuildTarget, $AssetsDir) -DestinationPath $OutputZip -Force
+
+          "OUTPUT_ZIP=$OutputZip" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "OUTPUT_NAME=${{ env.PROJECT_NAME }}-${{ env.PLATFORM }}" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ env.OUTPUT_ZIP }}
+          name: ${{ env.OUTPUT_NAME }}
+          if-no-files-found: error
+
+  release:
+    name: Publish Windows Release
+    needs: windows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout codes
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: scrcpy-mask-windows-x64
+          path: release-assets
+
+      - name: Generate release tag
+        shell: bash
+        run: |
+          VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          if [[ -z "$VERSION" ]]; then
+            echo "Failed to parse version from Cargo.toml"
+            exit 1
+          fi
+          TAG_NAME="v${VERSION}-windows-build.${{ github.run_id }}.${{ github.run_attempt }}"
+          RELEASE_NAME="scrcpy-mask ${TAG_NAME}"
+          echo "TAG_NAME=$TAG_NAME" >> "$GITHUB_ENV"
+          echo "RELEASE_NAME=$RELEASE_NAME" >> "$GITHUB_ENV"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: ${{ env.RELEASE_NAME }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          files: |
+            release-assets/**
