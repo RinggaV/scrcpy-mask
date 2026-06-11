@@ -33,10 +33,13 @@ jobs:
         shell: bash
         run: |
           cd frontend
-          cat >> .npmrc <<'EOF'
-          onlyBuiltDependencies[]=@parcel/watcher
-          onlyBuiltDependencies[]=@swc/core
-          onlyBuiltDependencies[]=esbuild
+          cat > pnpm-workspace.yaml <<'EOF'
+          packages:
+            - .
+          allowBuilds:
+            '@parcel/watcher': true
+            '@swc/core': true
+            esbuild: true
           EOF
           pnpm install
           pnpm build
