@@ -52,7 +52,7 @@ jobs:
 
   windows:
     name: Build Windows
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: build-frontend
     env:
       PLATFORM: windows-x64
@@ -123,6 +123,7 @@ jobs:
       - name: Build scrcpy-mask
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $ScriptDir = "${{ github.workspace }}"
           $Prefix = "ffmpeg-${{ env.PLATFORM }}"
           $FFMpeg = "ffmpeg-${{ env.FFMPEG_VERSION }}"
@@ -131,6 +132,9 @@ jobs:
           $env:FFMPEG_DIR = "$ScriptDir\$FFMpeg\$Prefix"
 
           cargo build --release
+          if ($LASTEXITCODE -ne 0) {
+            throw "cargo build failed with exit code $LASTEXITCODE"
+          }
 
           $OutputZip = "$ScriptDir\target\release\${{ env.PROJECT_NAME }}-${{ env.PLATFORM }}.zip"
           $BuildTarget = "$ScriptDir\target\release\${{ env.PROJECT_NAME }}.exe"

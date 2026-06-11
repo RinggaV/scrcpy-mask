@@ -47,7 +47,7 @@ jobs:
     needs: build-frontend
     strategy:
       matrix:
-        os: [windows-latest]
+        os: [windows-2022]
         include:
           - os: windows-latest
             platform: windows-x64
@@ -113,6 +113,7 @@ jobs:
       - name: Build scrcpy-mask
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $ScriptDir = "${{ github.workspace }}"
           $OS = "${{ matrix.platform }}"
           $Prefix = "ffmpeg-$OS"
@@ -123,6 +124,9 @@ jobs:
           $env:FFMPEG_DIR = "$ScriptDir\$FFMpeg\$Prefix"
 
           cargo build --release
+          if ($LASTEXITCODE -ne 0) {
+            throw "cargo build failed with exit code $LASTEXITCODE"
+          }
 
           $OutputZip = "$ScriptDir\$ProjectName-$OS.zip"
           $BuildTarget = "$ScriptDir\target\release\$ProjectName.exe"
