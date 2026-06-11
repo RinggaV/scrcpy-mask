@@ -1,9 +1,6 @@
 name: Release scrcpy-mask Windows
 
 on:
-  push:
-    branches:
-      - master
   workflow_dispatch:
 
 concurrency:
@@ -36,7 +33,10 @@ jobs:
         shell: bash
         run: |
           cd frontend
-          pnpm install --allow-build=@parcel/watcher --allow-build=@swc/core --allow-build=esbuild
+          pnpm config set only-built-dependencies[] @parcel/watcher
+          pnpm config set only-built-dependencies[] @swc/core
+          pnpm config set only-built-dependencies[] esbuild
+          pnpm install
           pnpm build
 
       - name: Upload frontend build artifact
