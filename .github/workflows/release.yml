@@ -1,9 +1,6 @@
 name: Release scrcpy-mask
 
 on:
-  push:
-    branches:
-      - master
   workflow_dispatch:
 
 permissions:
@@ -29,7 +26,12 @@ jobs:
         shell: bash
         run: |
           cd frontend
-          pnpm install --allow-build=@parcel/watcher --allow-build=@swc/core --allow-build=esbuild
+          cat >> .npmrc <<'EOF'
+          onlyBuiltDependencies[]=@parcel/watcher
+          onlyBuiltDependencies[]=@swc/core
+          onlyBuiltDependencies[]=esbuild
+          EOF
+          pnpm install
           pnpm build
       - name: Upload frontend build artifact
         uses: actions/upload-artifact@v4

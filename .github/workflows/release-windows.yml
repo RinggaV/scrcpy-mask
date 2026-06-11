@@ -33,9 +33,11 @@ jobs:
         shell: bash
         run: |
           cd frontend
-          pnpm config set only-built-dependencies[] @parcel/watcher
-          pnpm config set only-built-dependencies[] @swc/core
-          pnpm config set only-built-dependencies[] esbuild
+          cat >> .npmrc <<'EOF'
+          onlyBuiltDependencies[]=@parcel/watcher
+          onlyBuiltDependencies[]=@swc/core
+          onlyBuiltDependencies[]=esbuild
+          EOF
           pnpm install
           pnpm build
 
