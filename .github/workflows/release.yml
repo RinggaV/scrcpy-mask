@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           cd frontend
-          pnpm install
+          pnpm install --allow-build=@parcel/watcher --allow-build=@swc/core --allow-build=esbuild
           pnpm build
       - name: Upload frontend build artifact
         uses: actions/upload-artifact@v4
