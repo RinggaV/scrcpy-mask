@@ -438,7 +438,7 @@ export default function Devices() {
   const [pairCode, setPairCode] = useState("");
 
   const [otherDevices, setOtherDevices] = useState<AdbDevice[]>([]);
-  const videoState = useState(false);
+  const videoState = useState(true);
   const displayIDState = useState(0);
 
   useEffect(() => {

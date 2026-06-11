@@ -110,6 +110,13 @@ async fn _control_device(
     // prepare for scrcpy app
     let scid = gen_scid();
     let version = "2.4";
+    log::info!(
+        "[WebServe] control request: device_id={}, display_id={}, video={}, scid={}",
+        device_id,
+        display_id,
+        video,
+        scid
+    );
     let scrcpy_path = relate_to_root_path(["assets", &format!("scrcpy-mask-server-v{}", version)]);
     Device::push(
         &device_id,
